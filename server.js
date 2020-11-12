@@ -1,25 +1,161 @@
-const express = require("express");
-const parser = require("body-parser");
-const app = express();
-const cors = require("cors");
-const api = require("./routes");
+var express = require('express');
+var { graphqlHTTP} = require('express-graphql');
 
-require("dotenv").config();
+var { buildSchema } = require('graphql');
 
-const SERVER_ADDRESS = process.env.SERVER_ADDRESS;
+// GraphQL schema
+var schema = buildSchema(`
+    type Query {
+        course(id: Int!): Course
+        courses(topic: String): [Course]
+        coursesTitle(title: String): [Course]
+    },
+    type Mutation {
+      updateCourseTopic(id: Int!, topic: String!): Course
+      addCourse(title: String!, author:String!, topic:String!, url:String!): [Course]
+  },
+    type Course {
+        id: Int
+        title: String
+        author: String
+        description: String
+        topic: String
+        url: String
+    }
+`);
 
-app.use(parser.json());
-app.use(
-  parser.urlencoded({
-    extended: true,
-  })
-);
-app.use(cors());
-app.use("/api", api);
+var coursesData = [
+    {
+        id: 1,
+        title: 'The Complete Node.js Developer Course',
+        author: 'Andrew Mead, Rob Percival',
+        description: 'Learn Node.js by building real-world applications with Node, Express, MongoDB, Mocha, and more!',
+        topic: 'Node.js',
+        url: 'https://codingthesmartway.com/courses/nodejs/'
+    },
+    {
+        id: 2,
+        title: 'Node.js, Express & MongoDB Dev to Deployment',
+        author: 'Brad Traversy',
+        description: 'Learn by example building & deploying real-world Node.js applications from absolute scratch',
+        topic: 'Node.js',
+        url: 'https://codingthesmartway.com/courses/nodejs-express-mongodb/'
+    },
+    {
+        id: 3,
+        title: 'JavaScript: Understanding The Weird Parts',
+        author: 'Anthony Alicea',
+        description: 'An advanced JavaScript course for everyone! Scope, closures, prototypes, this, build your own framework, and more.',
+        topic: 'JavaScript',
+        url: 'https://codingthesmartway.com/courses/understand-javascript/'
+    }
+]
 
-const server = require("http").createServer(app);
-server.listen(SERVER_ADDRESS, () => {
-  console.log("server is listening on port 4000");
-});
+var getCourse = function(args) { 
+    var id = args.id;
+    return coursesData.filter(course => {
+        return course.id == id;
+    })[0];
+}
 
-module.exports = server;
+var getCourses = function(args) {
+    if (args.topic) {
+        var topic = args.topic;
+        return coursesData.filter(course => course.topic === topic);
+    } else {
+        return coursesData;
+    }
+}
+
+var getCourseTitle = function(args) { 
+
+  if (args.title) {
+    const title = args.title;
+    const regex = new RegExp(title, "g");
+    return coursesData.filter(course => regex.test(course.title) );
+} else {
+    return coursesData;
+}
+}
+
+var updateCourseTopic = function({id, topic}) {
+  coursesData.map(course => {
+      if (course.id === id) {
+          course.topic = topic;
+          return course;
+      }
+  });
+  return coursesData.filter(course => course.id === id) [0];
+}
+
+var addCourse = function({title, author, topic, url}) {
+
+  const course = {
+    id: coursesData.length,
+    title,
+    author,
+    topic,
+    url
+  }
+coursesData.push(course);
+
+return coursesData
+}
+
+
+var root = {
+    course: getCourse,
+    courses: getCourses,
+    coursesTitle: getCourseTitle,
+    updateCourseTopic: updateCourseTopic,
+    addCourse:addCourse
+};
+
+// Create an express server and a GraphQL endpoint
+var app = express();
+app.use('/graphql', graphqlHTTP({
+    schema: schema,
+    rootValue: root,
+    graphiql: true
+}));
+app.listen(4000, () => console.log('Express GraphQL Server Now Running On localhost:4000/graphql'));
+
+// MUTATION
+
+// mutation AddCourse($title: String!,$author:String!,$topic:String!, $url:String! ) {
+//   addCourse(title: $title,author:$author, topic:$topic, url:$url) {
+//       title
+//       author
+//       description
+//       topic
+//       url
+//   }
+// }
+
+
+// variable
+
+// {
+//   "title": "Java",
+//   "author": "john doe",
+//   "topic":"topic",
+//   "url":"url"
+// }
+
+//  QUERY
+
+// query getCourse($title: String!) {
+//   coursesTitle(title: $title) {
+//       title
+//       author
+//       description
+//       topic
+//       url
+//   }
+// }
+
+// variable
+
+// {
+//   "title": "JavaScript"
+// }
